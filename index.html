@@ -1,0 +1,441 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>World Time</title>
+
+<style>
+  :root {
+    --bg: transparent;
+    --border: rgba(255,255,255,.10);
+    --text: #f5f5f7;
+    --muted: #8e8e93;
+    --accent: #f5f5f7;
+    --twilight-glow: rgba(255, 190, 110, .38);
+    --twilight-warm: rgba(255, 176, 92, .16);
+    --twilight-cool: rgba(95, 140, 255, .12);
+    --night-darken: rgba(3, 8, 18, .68);
+    --land-day-boost: rgba(255, 248, 225, .16);
+    --ocean-day: rgba(90, 165, 225, .08);
+    --ocean-night: rgba(24, 42, 88, .16);
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body {
+    margin: 0;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    background: transparent;
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", sans-serif;
+  }
+
+  body {
+    display: grid;
+    place-items: stretch;
+  }
+
+  .app {
+    width: 100vw;
+    height: 100vh;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 31%;
+    gap: 2.5%;
+    padding: 3.25%;
+  }
+
+  .map-wrap {
+    position: relative;
+    min-width: 0;
+    min-height: 0;
+    display: grid;
+    place-items: center;
+  }
+
+  #map {
+    width: 100%;
+    height: 100%;
+    overflow: visible;
+  }
+
+  .city-label {
+    font-size: 14px;
+    font-weight: 700;
+    fill: rgba(255,255,255,.98);
+    paint-order: stroke;
+    stroke: #000;
+    stroke-width: 4.2px;
+    stroke-linejoin: round;
+  }
+
+  .city-time-label {
+    font-size: 13px;
+    font-weight: 650;
+    fill: rgba(255,255,255,.92);
+    font-variant-numeric: tabular-nums;
+    paint-order: stroke;
+    stroke: #000;
+    stroke-width: 4.2px;
+    stroke-linejoin: round;
+  }
+
+  .city-dot {
+    fill: #fff;
+    stroke: rgba(0,0,0,.85);
+    stroke-width: 1.5;
+  }
+
+  .side {
+    align-self: center;
+    border-left: 1px solid var(--border);
+    padding-left: 9%;
+  }
+
+  .heading {
+    color: var(--muted);
+    font-size: clamp(10px, 1.15vw, 15px);
+    font-weight: 700;
+    letter-spacing: .11em;
+    text-transform: uppercase;
+    margin-bottom: 10%;
+  }
+
+  .clock {
+    display: grid;
+    grid-template-columns: minmax(0,1fr) auto;
+    gap: 10px;
+    align-items: baseline;
+    padding: 7.5% 0;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .clock:last-child { border-bottom: 0; }
+
+  .city {
+    font-size: clamp(15px, 1.9vw, 25px);
+    font-weight: 650;
+    white-space: nowrap;
+  }
+
+  .zone {
+    margin-top: 3px;
+    color: var(--muted);
+    font-size: clamp(10px, 1vw, 14px);
+    font-weight: 550;
+  }
+
+  .time {
+    font-size: clamp(18px, 2.35vw, 31px);
+    font-variant-numeric: tabular-nums;
+    font-weight: 650;
+    white-space: nowrap;
+  }
+
+  @media (max-width: 650px) {
+    .app {
+      grid-template-columns: minmax(0, 1fr) 34%;
+      gap: 1.5%;
+      padding: 2.5%;
+    }
+    .side { padding-left: 6%; }
+    .clock { padding: 6% 0; }
+  }
+</style>
+</head>
+
+<body>
+<div class="app">
+  <div class="map-wrap">
+    <svg id="map" viewBox="0 0 1000 560" preserveAspectRatio="xMidYMid meet" aria-label="World day night map"></svg>
+  </div>
+
+  <section class="side">
+    <div class="heading">World Time</div>
+    <div id="clocks"></div>
+  </section>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/d3@7"></script>
+<script src="https://cdn.jsdelivr.net/npm/topojson-client@3"></script>
+
+<script>
+const CITIES = [
+  { name: "San Francisco", short: "PST", zone: "America/Los_Angeles", lat: 37.7749, lon: -122.4194 },
+  { name: "Seoul",    short: "KST", zone: "Asia/Seoul",          lat: 37.5665, lon: 126.9780 },
+  { name: "Istanbul", short: "TRT", zone: "Europe/Istanbul",     lat: 41.0082, lon: 28.9784 },
+  { name: "Cancún",   short: "EST", zone: "America/Cancun",      lat: 21.1619, lon: -86.8515 },
+  { name: "Jakarta",  short: "WIB", zone: "Asia/Jakarta",        lat: -6.2088, lon: 106.8456 }
+];
+
+const DAY_TEXTURE = "https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/textures/planets/earth_atmos_2048.jpg";
+const NIGHT_LIGHTS_TEXTURE = "https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/textures/planets/earth_lights_2048.png";
+
+const svg = d3.select("#map");
+const W = 1000, H = 560;
+const projection = d3.geoEquirectangular()
+  .translate([W/2, H/2])
+  .scale(W/(2*Math.PI))
+  .center([0, 4]);
+
+const path = d3.geoPath(projection);
+
+const defs = svg.append("defs");
+const landClip = defs.append("clipPath").attr("id", "landClip");
+const nightClip = defs.append("clipPath").attr("id", "nightClip");
+const twilightFilter = defs.append("filter").attr("id", "softGlow")
+  .attr("x","-20%").attr("y","-20%").attr("width","140%").attr("height","140%");
+twilightFilter.append("feGaussianBlur").attr("stdDeviation", 7);
+
+const wideGlowFilter = defs.append("filter").attr("id", "wideGlow")
+  .attr("x","-30%").attr("y","-30%").attr("width","160%").attr("height","160%");
+wideGlowFilter.append("feGaussianBlur").attr("stdDeviation", 13);
+
+// Subtle ocean tint to make the live day/night split easier to read.
+svg.append("rect")
+  .attr("x", 0).attr("y", 0)
+  .attr("width", W).attr("height", H)
+  .attr("fill", "var(--ocean-day)");
+
+const oceanNight = svg.append("g").attr("clip-path", "url(#nightClip)");
+oceanNight.append("rect")
+  .attr("x", 0).attr("y", 0)
+  .attr("width", W).attr("height", H)
+  .attr("fill", "var(--ocean-night)");
+
+// Satellite imagery clipped to land only.
+// A 2:1 equirectangular texture is 500px high at this 1000px-wide projection.
+// It starts at y=41.111111 because the D3 projection is centered at latitude 4°.
+const TEXTURE_Y = 41.111111;
+const TEXTURE_H = 500.000000;
+
+const landVisual = svg.append("g").attr("clip-path", "url(#landClip)");
+
+landVisual.append("image")
+  .attr("href", DAY_TEXTURE)
+  .attr("x", 0).attr("y", TEXTURE_Y)
+  .attr("width", W).attr("height", TEXTURE_H)
+  .attr("preserveAspectRatio", "none")
+  .attr("opacity", 1);
+
+landVisual.append("rect")
+  .attr("x", 0).attr("y", 0)
+  .attr("width", W).attr("height", H)
+  .attr("fill", "var(--land-day-boost)");
+
+landVisual.append("image")
+  .attr("href", DAY_TEXTURE)
+  .attr("x", 0).attr("y", TEXTURE_Y)
+  .attr("width", W).attr("height", TEXTURE_H)
+  .attr("preserveAspectRatio", "none")
+  .attr("opacity", 0.18)
+  .style("mix-blend-mode", "screen");
+
+// Night imagery is clipped by both the land mask and live night region.
+const nightLand = svg.append("g").attr("clip-path", "url(#landClip)");
+const nightGroup = nightLand.append("g").attr("clip-path", "url(#nightClip)");
+
+nightGroup.append("rect")
+  .attr("x", 0).attr("y", 0)
+  .attr("width", W).attr("height", H)
+  .attr("fill", "var(--night-darken)");
+
+nightGroup.append("image")
+  .attr("href", NIGHT_LIGHTS_TEXTURE)
+  .attr("x", 0).attr("y", TEXTURE_Y)
+  .attr("width", W).attr("height", TEXTURE_H)
+  .attr("preserveAspectRatio", "none")
+  .attr("opacity", 0.95)
+  .style("mix-blend-mode", "screen");
+
+const twilightWarm = svg.append("path")
+  .attr("fill","none")
+  .attr("stroke","var(--twilight-warm)")
+  .attr("stroke-width", 22)
+  .attr("filter","url(#wideGlow)")
+  .attr("clip-path", "url(#landClip)");
+
+const twilightCool = svg.append("path")
+  .attr("fill","none")
+  .attr("stroke","var(--twilight-cool)")
+  .attr("stroke-width", 16)
+  .attr("filter","url(#wideGlow)")
+  .attr("clip-path", "url(#landClip)");
+
+const twilight = svg.append("path")
+  .attr("fill","none")
+  .attr("stroke","var(--twilight-glow)")
+  .attr("stroke-width", 5.8)
+  .attr("filter","url(#softGlow)")
+  .attr("clip-path", "url(#landClip)");
+
+const markers = svg.append("g");
+
+function rad(d){ return d * Math.PI / 180; }
+function deg(r){ return r * 180 / Math.PI; }
+function normLon(lon){
+  lon = ((lon + 180) % 360 + 360) % 360 - 180;
+  return lon;
+}
+
+// NOAA-style approximate solar position, accurate enough for a visual day/night terminator.
+function subsolarPoint(date) {
+  const msDay = 86400000;
+  const jd = date.getTime()/msDay + 2440587.5;
+  const n = jd - 2451545.0;
+  const L = (280.460 + 0.9856474*n) % 360;
+  const g = rad((357.528 + 0.9856003*n) % 360);
+  const lambda = rad((L + 1.915*Math.sin(g) + 0.020*Math.sin(2*g)) % 360);
+  const epsilon = rad(23.439 - 0.0000004*n);
+
+  const dec = Math.asin(Math.sin(epsilon)*Math.sin(lambda));
+  const ra = Math.atan2(Math.cos(epsilon)*Math.sin(lambda), Math.cos(lambda));
+
+  const T = (jd - 2451545.0) / 36525.0;
+  let GMST = 280.46061837 + 360.98564736629*(jd-2451545.0)
+           + 0.000387933*T*T - T*T*T/38710000;
+  GMST = ((GMST % 360) + 360) % 360;
+
+  const sunLon = normLon(deg(ra) - GMST);
+  return { lat: deg(dec), lon: sunLon };
+}
+
+// Trace the astronomical horizon: points exactly 90° from the subsolar point.
+function terminatorRing(sun) {
+  const phiS = rad(sun.lat);
+  const lambdaS = rad(sun.lon);
+  const pts = [];
+  for (let bearing = 0; bearing <= 360; bearing += 1) {
+    const a = rad(bearing);
+    const d = Math.PI/2;
+    const phi = Math.asin(
+      Math.sin(phiS)*Math.cos(d) +
+      Math.cos(phiS)*Math.sin(d)*Math.cos(a)
+    );
+    const lambda = lambdaS + Math.atan2(
+      Math.sin(a)*Math.sin(d)*Math.cos(phiS),
+      Math.cos(d)-Math.sin(phiS)*Math.sin(phi)
+    );
+    pts.push([normLon(deg(lambda)), deg(phi)]);
+  }
+  return pts;
+}
+
+function nightPolygon(sun) {
+  const ring = terminatorRing(sun);
+  // GeoJSON polygon orientation + containment can be awkward across ±180°.
+  // We test whether the antipode (midnight point) is inside; if not, reverse.
+  let coords = ring.concat([ring[0]]);
+  let poly = {type:"Polygon", coordinates:[coords]};
+  const midnight = [normLon(sun.lon + 180), -sun.lat];
+  if (!d3.geoContains(poly, midnight)) {
+    coords = coords.slice().reverse();
+    poly = {type:"Polygon", coordinates:[coords]};
+  }
+  return poly;
+}
+
+function drawSolar() {
+  const sun = subsolarPoint(new Date());
+  const night = nightPolygon(sun);
+  const ring = {type:"LineString", coordinates: terminatorRing(sun)};
+
+  nightClip.selectAll("*").remove();
+  nightClip.append("path").attr("d", path(night));
+  twilightWarm.attr("d", path(ring));
+  twilightCool.attr("d", path(ring));
+  twilight.attr("d", path(ring));
+
+}
+
+function formatTime(zone) {
+  return new Intl.DateTimeFormat("en-US", {
+    timeZone: zone,
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true
+  }).format(new Date());
+}
+
+function zoneAbbr(zone) {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: zone,
+    timeZoneName: "short"
+  }).formatToParts(new Date());
+  return parts.find(p => p.type === "timeZoneName")?.value || "";
+}
+
+function renderClocks() {
+  const root = document.getElementById("clocks");
+  root.innerHTML = "";
+  CITIES.forEach(c => {
+    const div = document.createElement("div");
+    div.className = "clock";
+    div.innerHTML = `
+      <div>
+        <div class="city">${c.name}</div>
+        <div class="zone">${c.name === "San Francisco" ? zoneAbbr(c.zone) : c.short}</div>
+      </div>
+      <div class="time">${formatTime(c.zone)}</div>
+    `;
+    root.appendChild(div);
+  });
+
+  drawMarkers();
+}
+
+function drawMarkers() {
+  markers.selectAll("*").remove();
+  CITIES.forEach(c => {
+    const [x,y] = projection([c.lon, c.lat]);
+
+    markers.append("circle")
+      .attr("class","city-dot")
+      .attr("cx",x).attr("cy",y).attr("r",5);
+
+    markers.append("text")
+      .attr("class","city-label")
+      .attr("x",x + 10).attr("y",y - 7)
+      .text(c.name);
+
+    markers.append("text")
+      .attr("class","city-time-label")
+      .attr("x",x + 10).attr("y",y + 10)
+      .text(formatTime(c.zone));
+  });
+}
+
+async function init() {
+  const world = await d3.json("https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json");
+  const countries = topojson.feature(world, world.objects.countries).features;
+
+  // Build the visible land mask from country polygons and omit Antarctica.
+  // Antarctica's centroid is far south; this keeps all normal inhabited land/islands.
+  const visibleCountries = countries.filter(f => {
+    const c = d3.geoCentroid(f);
+    return c[1] > -60;
+  });
+
+  const visibleLand = {
+    type: "FeatureCollection",
+    features: visibleCountries
+  };
+
+  landClip.selectAll("*").remove();
+  landClip.append("path")
+    .datum(visibleLand)
+    .attr("d", path);
+
+  drawSolar();
+  renderClocks();
+
+  setInterval(renderClocks, 1000);
+  setInterval(drawSolar, 60000);
+}
+
+init();
+</script>
+</body>
+</html>
