@@ -41,28 +41,28 @@
   .app {
     width: 100vw;
     height: 100vh;
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) 31%;
-    gap: 2.5%;
-    padding: 3.25%;
+    display: block;
+    padding: 0;
+    margin: 0;
   }
 
   .map-wrap {
     position: relative;
-    min-width: 0;
-    min-height: 0;
-    display: grid;
-    place-items: center;
+    width: 100vw;
+    height: 100vh;
+    margin: 0;
+    padding: 0;
+    overflow: hidden;
   }
 
   #map {
-    width: 100%;
-    height: 100%;
-    overflow: visible;
+    width: 100vw;
+    height: 100vh;
+    display: block;
   }
 
   .city-label {
-    font-size: 14px;
+    font-size: 16px;
     font-weight: 700;
     fill: rgba(255,255,255,.98);
     paint-order: stroke;
@@ -72,7 +72,7 @@
   }
 
   .city-time-label {
-    font-size: 13px;
+    font-size: 15px;
     font-weight: 650;
     fill: rgba(255,255,255,.92);
     font-variant-numeric: tabular-nums;
@@ -87,62 +87,6 @@
     stroke: rgba(0,0,0,.85);
     stroke-width: 1.5;
   }
-
-  .side {
-    align-self: center;
-    border-left: 1px solid var(--border);
-    padding-left: 9%;
-  }
-
-  .heading {
-    color: var(--muted);
-    font-size: clamp(10px, 1.15vw, 15px);
-    font-weight: 700;
-    letter-spacing: .11em;
-    text-transform: uppercase;
-    margin-bottom: 10%;
-  }
-
-  .clock {
-    display: grid;
-    grid-template-columns: minmax(0,1fr) auto;
-    gap: 10px;
-    align-items: baseline;
-    padding: 7.5% 0;
-    border-bottom: 1px solid var(--border);
-  }
-
-  .clock:last-child { border-bottom: 0; }
-
-  .city {
-    font-size: clamp(15px, 1.9vw, 25px);
-    font-weight: 650;
-    white-space: nowrap;
-  }
-
-  .zone {
-    margin-top: 3px;
-    color: var(--muted);
-    font-size: clamp(10px, 1vw, 14px);
-    font-weight: 550;
-  }
-
-  .time {
-    font-size: clamp(18px, 2.35vw, 31px);
-    font-variant-numeric: tabular-nums;
-    font-weight: 650;
-    white-space: nowrap;
-  }
-
-  @media (max-width: 650px) {
-    .app {
-      grid-template-columns: minmax(0, 1fr) 34%;
-      gap: 1.5%;
-      padding: 2.5%;
-    }
-    .side { padding-left: 6%; }
-    .clock { padding: 6% 0; }
-  }
 </style>
 </head>
 
@@ -151,11 +95,6 @@
   <div class="map-wrap">
     <svg id="map" viewBox="0 0 1000 560" preserveAspectRatio="xMidYMid meet" aria-label="World day night map"></svg>
   </div>
-
-  <section class="side">
-    <div class="heading">World Time</div>
-    <div id="clocks"></div>
-  </section>
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/d3@7"></script>
@@ -193,7 +132,6 @@ const wideGlowFilter = defs.append("filter").attr("id", "wideGlow")
   .attr("x","-30%").attr("y","-30%").attr("width","160%").attr("height","160%");
 wideGlowFilter.append("feGaussianBlur").attr("stdDeviation", 13);
 
-// Subtle ocean tint to make the live day/night split easier to read.
 svg.append("rect")
   .attr("x", 0).attr("y", 0)
   .attr("width", W).attr("height", H)
@@ -205,9 +143,6 @@ oceanNight.append("rect")
   .attr("width", W).attr("height", H)
   .attr("fill", "var(--ocean-night)");
 
-// Satellite imagery clipped to land only.
-// A 2:1 equirectangular texture is 500px high at this 1000px-wide projection.
-// It starts at y=41.111111 because the D3 projection is centered at latitude 4°.
 const TEXTURE_Y = 41.111111;
 const TEXTURE_H = 500.000000;
 
@@ -233,7 +168,6 @@ landVisual.append("image")
   .attr("opacity", 0.18)
   .style("mix-blend-mode", "screen");
 
-// Night imagery is clipped by both the land mask and live night region.
 const nightLand = svg.append("g").attr("clip-path", "url(#landClip)");
 const nightGroup = nightLand.append("g").attr("clip-path", "url(#nightClip)");
 
@@ -280,7 +214,6 @@ function normLon(lon){
   return lon;
 }
 
-// NOAA-style approximate solar position, accurate enough for a visual day/night terminator.
 function subsolarPoint(date) {
   const msDay = 86400000;
   const jd = date.getTime()/msDay + 2440587.5;
@@ -302,7 +235,6 @@ function subsolarPoint(date) {
   return { lat: deg(dec), lon: sunLon };
 }
 
-// Trace the astronomical horizon: points exactly 90° from the subsolar point.
 function terminatorRing(sun) {
   const phiS = rad(sun.lat);
   const lambdaS = rad(sun.lon);
@@ -325,8 +257,6 @@ function terminatorRing(sun) {
 
 function nightPolygon(sun) {
   const ring = terminatorRing(sun);
-  // GeoJSON polygon orientation + containment can be awkward across ±180°.
-  // We test whether the antipode (midnight point) is inside; if not, reverse.
   let coords = ring.concat([ring[0]]);
   let poly = {type:"Polygon", coordinates:[coords]};
   const midnight = [normLon(sun.lon + 180), -sun.lat];
@@ -347,7 +277,6 @@ function drawSolar() {
   twilightWarm.attr("d", path(ring));
   twilightCool.attr("d", path(ring));
   twilight.attr("d", path(ring));
-
 }
 
 function formatTime(zone) {
@@ -359,30 +288,7 @@ function formatTime(zone) {
   }).format(new Date());
 }
 
-function zoneAbbr(zone) {
-  const parts = new Intl.DateTimeFormat("en-US", {
-    timeZone: zone,
-    timeZoneName: "short"
-  }).formatToParts(new Date());
-  return parts.find(p => p.type === "timeZoneName")?.value || "";
-}
-
 function renderClocks() {
-  const root = document.getElementById("clocks");
-  root.innerHTML = "";
-  CITIES.forEach(c => {
-    const div = document.createElement("div");
-    div.className = "clock";
-    div.innerHTML = `
-      <div>
-        <div class="city">${c.name}</div>
-        <div class="zone">${c.name === "San Francisco" ? zoneAbbr(c.zone) : c.short}</div>
-      </div>
-      <div class="time">${formatTime(c.zone)}</div>
-    `;
-    root.appendChild(div);
-  });
-
   drawMarkers();
 }
 
@@ -411,8 +317,6 @@ async function init() {
   const world = await d3.json("https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json");
   const countries = topojson.feature(world, world.objects.countries).features;
 
-  // Build the visible land mask from country polygons and omit Antarctica.
-  // Antarctica's centroid is far south; this keeps all normal inhabited land/islands.
   const visibleCountries = countries.filter(f => {
     const c = d3.geoCentroid(f);
     return c[1] > -60;
