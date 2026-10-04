@@ -12,13 +12,11 @@
     --text: #f5f5f7;
     --muted: #8e8e93;
     --accent: #f5f5f7;
-    --twilight-glow: rgba(255, 190, 110, .38);
-    --twilight-warm: rgba(255, 176, 92, .16);
+    --twilight-glow: rgba(255, 205, 135, .52);
+    --twilight-warm: rgba(255, 176, 92, .22);
     --twilight-cool: rgba(95, 140, 255, .12);
     --night-darken: rgba(3, 8, 18, .68);
     --land-day-boost: rgba(255, 248, 225, .16);
-    --ocean-day: rgba(90, 165, 225, .08);
-    --ocean-night: rgba(24, 42, 88, .16);
   }
 
   * { box-sizing: border-box; }
@@ -135,17 +133,6 @@ const wideGlowFilter = defs.append("filter").attr("id", "wideGlow")
   .attr("x","-30%").attr("y","-30%").attr("width","160%").attr("height","160%");
 wideGlowFilter.append("feGaussianBlur").attr("stdDeviation", 13);
 
-svg.append("rect")
-  .attr("x", 0).attr("y", 0)
-  .attr("width", W).attr("height", H)
-  .attr("fill", "var(--ocean-day)");
-
-const oceanNight = svg.append("g").attr("clip-path", "url(#nightClip)");
-oceanNight.append("rect")
-  .attr("x", 0).attr("y", 0)
-  .attr("width", W).attr("height", H)
-  .attr("fill", "var(--ocean-night)");
-
 const TEXTURE_Y = 41.111111;
 const TEXTURE_H = 500.000000;
 
@@ -191,22 +178,19 @@ const twilightWarm = svg.append("path")
   .attr("fill","none")
   .attr("stroke","var(--twilight-warm)")
   .attr("stroke-width", 22)
-  .attr("filter","url(#wideGlow)")
-  .attr("clip-path", "url(#landClip)");
+  .attr("filter","url(#wideGlow)");
 
 const twilightCool = svg.append("path")
   .attr("fill","none")
   .attr("stroke","var(--twilight-cool)")
   .attr("stroke-width", 16)
-  .attr("filter","url(#wideGlow)")
-  .attr("clip-path", "url(#landClip)");
+  .attr("filter","url(#wideGlow)");
 
 const twilight = svg.append("path")
   .attr("fill","none")
   .attr("stroke","var(--twilight-glow)")
   .attr("stroke-width", 5.8)
-  .attr("filter","url(#softGlow)")
-  .attr("clip-path", "url(#landClip)");
+  .attr("filter","url(#softGlow)");
 
 const markers = svg.append("g");
 
