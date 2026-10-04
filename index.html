@@ -12,11 +12,11 @@
     --text: #f5f5f7;
     --muted: #8e8e93;
     --accent: #f5f5f7;
-    --twilight-glow: rgba(255, 205, 135, .52);
-    --twilight-warm: rgba(255, 176, 92, .22);
-    --twilight-cool: rgba(95, 140, 255, .12);
-    --night-darken: rgba(3, 8, 18, .68);
-    --land-day-boost: rgba(255, 248, 225, .16);
+    --twilight-glow: rgba(255, 240, 205, .92);
+    --twilight-warm: rgba(255, 190, 110, .40);
+    --twilight-cool: rgba(105, 150, 255, .18);
+    --night-darken: rgba(3, 8, 18, .76);
+    --land-day-boost: rgba(255, 250, 232, .30);
   }
 
   * { box-sizing: border-box; }
@@ -89,6 +89,8 @@
     stroke: rgba(0,0,0,.85);
     stroke-width: 1.5;
   }
+
+
 </style>
 </head>
 
@@ -134,6 +136,10 @@ const wideGlowFilter = defs.append("filter").attr("id", "wideGlow")
   .attr("x","-30%").attr("y","-30%").attr("width","160%").attr("height","160%");
 wideGlowFilter.append("feGaussianBlur").attr("stdDeviation", 13);
 
+// Subtle ocean tint to make the live day/night split easier to read.
+// Satellite imagery clipped to land only.
+// A 2:1 equirectangular texture is 500px high at this 1000px-wide projection.
+// It starts at y=41.111111 because the D3 projection is centered at latitude 4°.
 const TEXTURE_Y = 41.111111;
 const TEXTURE_H = 500.000000;
 
@@ -156,9 +162,10 @@ landVisual.append("image")
   .attr("x", 0).attr("y", TEXTURE_Y)
   .attr("width", W).attr("height", TEXTURE_H)
   .attr("preserveAspectRatio", "none")
-  .attr("opacity", 0.18)
+  .attr("opacity", 0.34)
   .style("mix-blend-mode", "screen");
 
+// Night imagery is clipped by both the land mask and live night region.
 const nightLand = svg.append("g").attr("clip-path", "url(#landClip)");
 const nightGroup = nightLand.append("g").attr("clip-path", "url(#nightClip)");
 
@@ -178,19 +185,19 @@ nightGroup.append("image")
 const twilightWarm = svg.append("path")
   .attr("fill","none")
   .attr("stroke","var(--twilight-warm)")
-  .attr("stroke-width", 22)
+  .attr("stroke-width", 34)
   .attr("filter","url(#wideGlow)");
 
 const twilightCool = svg.append("path")
   .attr("fill","none")
   .attr("stroke","var(--twilight-cool)")
-  .attr("stroke-width", 16)
+  .attr("stroke-width", 24)
   .attr("filter","url(#wideGlow)");
 
 const twilight = svg.append("path")
   .attr("fill","none")
   .attr("stroke","var(--twilight-glow)")
-  .attr("stroke-width", 5.8)
+  .attr("stroke-width", 8.5)
   .attr("filter","url(#softGlow)");
 
 const markers = svg.append("g");
@@ -202,6 +209,7 @@ function normLon(lon){
   return lon;
 }
 
+// NOAA-style approximate solar position, accurate enough for a visual day/night terminator.
 function subsolarPoint(date) {
   const msDay = 86400000;
   const jd = date.getTime()/msDay + 2440587.5;
@@ -223,6 +231,7 @@ function subsolarPoint(date) {
   return { lat: deg(dec), lon: sunLon };
 }
 
+// Trace the astronomical horizon: points exactly 90° from the subsolar point.
 function terminatorRing(sun) {
   const phiS = rad(sun.lat);
   const lambdaS = rad(sun.lon);
@@ -245,6 +254,8 @@ function terminatorRing(sun) {
 
 function nightPolygon(sun) {
   const ring = terminatorRing(sun);
+  // GeoJSON polygon orientation + containment can be awkward across ±180°.
+  // We test whether the antipode (midnight point) is inside; if not, reverse.
   let coords = ring.concat([ring[0]]);
   let poly = {type:"Polygon", coordinates:[coords]};
   const midnight = [normLon(sun.lon + 180), -sun.lat];
@@ -265,6 +276,7 @@ function drawSolar() {
   twilightWarm.attr("d", path(ring));
   twilightCool.attr("d", path(ring));
   twilight.attr("d", path(ring));
+
 }
 
 function formatTime(zone) {
@@ -274,6 +286,14 @@ function formatTime(zone) {
     minute: "2-digit",
     hour12: true
   }).format(new Date());
+}
+
+function zoneAbbr(zone) {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: zone,
+    timeZoneName: "short"
+  }).formatToParts(new Date());
+  return parts.find(p => p.type === "timeZoneName")?.value || "";
 }
 
 function renderClocks() {
@@ -305,6 +325,8 @@ async function init() {
   const world = await d3.json("https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json");
   const countries = topojson.feature(world, world.objects.countries).features;
 
+  // Build the visible land mask from country polygons and omit Antarctica.
+  // Antarctica's centroid is far south; this keeps all normal inhabited land/islands.
   const visibleCountries = countries.filter(f => {
     const c = d3.geoCentroid(f);
     return c[1] > -60;
