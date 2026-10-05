@@ -65,23 +65,23 @@
   }
 
   .city-label {
-    font-size: 16px;
+    font-size: 19px;
     font-weight: 700;
     fill: rgba(255,255,255,.98);
     paint-order: stroke;
     stroke: #000;
-    stroke-width: 4.2px;
+    stroke-width: 4.6px;
     stroke-linejoin: round;
   }
 
   .city-time-label {
-    font-size: 15px;
+    font-size: 17px;
     font-weight: 650;
     fill: rgba(255,255,255,.92);
     font-variant-numeric: tabular-nums;
     paint-order: stroke;
     stroke: #000;
-    stroke-width: 4.2px;
+    stroke-width: 4.6px;
     stroke-linejoin: round;
   }
 
@@ -109,7 +109,10 @@ const CITIES = [
   { name: "Seoul",    short: "KST", zone: "Asia/Seoul",          lat: 37.5665, lon: 126.9780 },
   { name: "Istanbul", short: "TRT", zone: "Europe/Istanbul",     lat: 41.0082, lon: 28.9784 },
   { name: "Cancún",   short: "EST", zone: "America/Cancun",      lat: 21.1619, lon: -86.8515 },
-  { name: "Jakarta",  short: "WIB", zone: "Asia/Jakarta",        lat: -6.2088, lon: 106.8456 }
+  { name: "Jakarta",  short: "WIB", zone: "Asia/Jakarta",        lat: -6.2088, lon: 106.8456 },
+  { name: "New Delhi", short: "IST", zone: "Asia/Kolkata",       lat: 28.6139, lon: 77.2090 },
+  { name: "London",   short: "GMT", zone: "Europe/London",       lat: 51.5074, lon: -0.1278 },
+  { name: "Sydney",   short: "AEST", zone: "Australia/Sydney",   lat: -33.8688, lon: 151.2093, labelLeft: true }
 ];
 
 const svg = d3.select("#map");
@@ -256,14 +259,20 @@ function drawMarkers() {
       .attr("class","city-dot")
       .attr("cx",x).attr("cy",y).attr("r",5);
 
+    // Cities near the right edge get their label on the left so it isn't cut off.
+    const lx = c.labelLeft ? x - 10 : x + 10;
+    const anchor = c.labelLeft ? "end" : "start";
+
     markers.append("text")
       .attr("class","city-label")
-      .attr("x",x + 10).attr("y",y - 7)
+      .attr("x",lx).attr("y",y - 8)
+      .attr("text-anchor",anchor)
       .text(c.name);
 
     markers.append("text")
       .attr("class","city-time-label")
-      .attr("x",x + 10).attr("y",y + 10)
+      .attr("x",lx).attr("y",y + 12)
+      .attr("text-anchor",anchor)
       .text(formatTime(c.zone));
   });
 }
